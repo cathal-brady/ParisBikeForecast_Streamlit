@@ -1,24 +1,28 @@
-# WARNING - This script can be slow as we have to download the entire dataset which is ~1.3GB
+# WARNING: This script can be slow, as it downloads the entire dataset (~1.3GB).
 
 import pandas as pd
 
 # Define the dataset URL
-dataset_url = 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/comptage-velo-donnees-compteurs/exports/csv?lang=fr&timezone=Europe%2FParis&use_labels=true&delimiter=%3B'
+dataset_url = (
+    'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/'
+    'comptage-velo-donnees-compteurs/exports/csv?lang=fr&timezone='
+    'Europe%2FParis&use_labels=true&delimiter=%3B'
+)
 
-# Try to download the data
+# Try to download the dataset and handle potential errors
 try:
     raw_df = pd.read_csv(dataset_url, sep=';')
 except Exception as e:
     print(f"Error downloading the dataset: {e}")
     exit()
 
-# Select specific columns
-selected_columns = raw_df[['Nom du site de comptage', 
-                            'Comptage horaire', 
-                            'Date et heure de comptage', 
+# Select relevant columns from the raw DataFrame
+selected_columns = raw_df[['Nom du site de comptage',
+                            'Comptage horaire',
+                            'Date et heure de comptage',
                             'Coordonnées géographiques']]
 
-# Rename columns to English
+# Rename columns to English for easier understanding
 df = selected_columns.rename(columns={
     'Nom du site de comptage': 'Site Name',
     'Date et heure de comptage': 'Date and Time',
@@ -26,22 +30,24 @@ df = selected_columns.rename(columns={
     'Comptage horaire': 'Hourly Count',
 })
 
-# Create a summary to count entries per site
+df['Date and Time'] = pd.to_datetime(df['Date and Time'], utc=True)
+
+# Create a summary of the number of entries for each site
 site_counts = df['Site Name'].value_counts()
 
-# Filter for sites with 100 or more counts
+# Filter for sites that have 100 or more counts
 valid_sites = site_counts[site_counts >= 100].index
 
-# Keep only the entries in df for these valid sites
+# Retain only the entries for the valid sites in the DataFrame
 df = df[df['Site Name'].isin(valid_sites)]
 
-# Create unique sites DataFrame
+# Create a DataFrame of unique sites with their coordinates
 unique_sites = df[['Site Name', 'Geographical Coordinates']].drop_duplicates()
 
-# Drop the original Geographical Coordinates column from the main DataFrame - this is for efficiency 
+# Drop the Geographical Coordinates column from the main DataFrame for efficiency
 df = df.drop(columns=['Geographical Coordinates'])
 
-# Reset index for clarity
+# Reset the index of both DataFrames for clarity
 df.reset_index(drop=True, inplace=True)
 unique_sites.reset_index(drop=True, inplace=True)
 

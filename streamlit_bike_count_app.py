@@ -7,7 +7,7 @@ import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 
-# Load site names
+# Load site names from a CSV file
 site_data = pd.read_csv('data/site_coordinates.csv')
 
 # Calculate average latitude and longitude for map centering
@@ -42,12 +42,12 @@ st.write("""
 
 # Display the map with all sites
 st.subheader("Map of all sites you can choose from")
-st_folium(m, width=700, height=500)
 
-# Section to choose parameters for the model
-st.subheader("Choose your parameters for the model")
+with st.container():
+    st_folium(m, width=700, height=500)
+    st.subheader("Choose your parameters for the model")
 
-# Function to determine restriction level
+# Function to determine restriction level based on dates
 def get_restriction_level(date):
     date_ranges = [
         ('2020-10-16', '2020-10-17', 3),
@@ -57,9 +57,9 @@ def get_restriction_level(date):
     for start_date, end_date, level in date_ranges:
         if start_date <= date.strftime('%Y-%m-%d') < end_date:
             return level
-    return 0  # Default level
+    return 0  # Default level if no match
 
-# Function to prepare features
+# Function to prepare features for the model
 def prepare_features(selected_site, selected_date, selected_time):
     selected_datetime = pd.to_datetime(f"{selected_date} {selected_time}")
     month = selected_datetime.month
@@ -85,34 +85,36 @@ def prepare_features(selected_site, selected_date, selected_time):
         'rush_hour': [rush_hour],
     })
 
-# Streamlit UI
+# Streamlit UI for selecting site, date, and time
 selected_site = st.selectbox("Select a site", site_data['Site Name'])
 selected_date = st.date_input("Select a date", value=pd.to_datetime("today"))
 hours = [f"{hour:02d}:00" for hour in range(24)]
 selected_time = st.selectbox("Select a time", hours)
 
-# Add a button for prediction
+# Button to predict bike count
 if st.button("Predict Bike Count"):
     features = prepare_features(selected_site, selected_date, selected_time)
 
-    # Load the model
+    # Load the model specific to the selected site
     model_filename = f"pretrained_catboost_models/{selected_site}_catboost_model.joblib"
     model = joblib.load(model_filename)
 
-    # Make prediction
+    # Make prediction using the loaded model
     prediction_log = model.predict(features)
     prediction_count = max(0, round(np.exp(prediction_log[0]) - 1))  # Undo log transformation
 
-    st.write(f"Predicted Bike Count: {prediction_count}")
+    st.subheader(f"Predicted Bike Count: {prediction_count}")
 
     # Load historical data and filter for the selected site
     historical_data = pd.read_csv('data/clean_count_data.csv')
-    site_historical_data = historical_data[historical_data['Site Name'] == selected_site]
+    site_historical_data = historical_data[historical_data['Site Name'] == selected_site].copy()  # Avoid SettingWithCopyWarning
 
-    # Convert 'Date and Time' to datetime and extract hour
+    # Convert 'Date and Time' to datetime format
     site_historical_data['Date and Time'] = pd.to_datetime(site_historical_data['Date and Time'], utc=True, errors='coerce')
     site_historical_data = site_historical_data.dropna(subset=['Date and Time'])
-    site_historical_data['Hour'] = site_historical_data['Date and Time'].dt.hour
+
+    # Extract hour from 'Date and Time'
+    site_historical_data['Hour'] = site_historical_data['Date and Time'].dt.hour  # Using direct assignment for extraction
 
     # Calculate average counts per hour
     average_hourly_counts = site_historical_data.groupby('Hour')['Hourly Count'].mean().reset_index()
@@ -121,17 +123,11 @@ if st.button("Predict Bike Count"):
     selected_hour = pd.to_datetime(f"{selected_date} {selected_time}").hour
     prediction_df = pd.DataFrame({'Hour': [selected_hour], 'Hourly Count': [prediction_count]})
 
-    # Combine average counts and prediction
-    combined_counts = pd.concat([average_hourly_counts, prediction_df], ignore_index=True)
-
-    # Sort by hour for correct plotting
-    combined_counts.sort_values('Hour', inplace=True)
-
     # Plot the data
     plt.figure(figsize=(10, 5))
-    plt.plot(combined_counts['Hour'], combined_counts['Hourly Count'], label='Average Hourly Counts', marker='o')
+    plt.plot(average_hourly_counts['Hour'], average_hourly_counts['Hourly Count'], label='Average Hourly Counts', marker='o')
     plt.axvline(x=selected_hour, color='red', linestyle='--', label='Predicted Hour')
-    plt.scatter(selected_hour, prediction_count, color='orange', label='Predicted Count', zorder=5)
+    plt.scatter(prediction_df['Hour'], prediction_df['Hourly Count'], color='orange', label='Predicted Count')
     plt.title(f'Average Hourly Bike Count at {selected_site}')
     plt.xlabel('Hour of the Day')
     plt.ylabel('Average Bike Count')

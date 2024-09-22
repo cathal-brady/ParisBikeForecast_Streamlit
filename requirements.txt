@@ -81,12 +81,6 @@ snowballstemmer==2.2.0
 streamlit==1.38.0
 streamlit_folium==0.22.1
 tenacity==8.5.0
-tensorboard==2.15.1
-tensorboard-data-server==0.7.2
-tensorflow==2.15.0
-tensorflow-estimator==2.15.0
-tensorflow-intel==2.15.0
-tensorflow-io-gcs-filesystem==0.31.0
 termcolor==2.4.0
 threadpoolctl==3.2.0
 toml==0.10.2
